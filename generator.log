@@ -1,0 +1,8 @@
+/Users/fanghaizhou/project/crypto_proxy 有关于行情接收的部分，
+我现在想把connection的部分，关于维护心跳的逻辑等，搬运到我当前的项目中
+
+但实现逻辑和crypto_proxy有区别
+
+这个项目把收到的webscoekt bytes serde json解析为msg，推送后再用zmq发送，而我
+不需要。
+

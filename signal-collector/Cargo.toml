@@ -1,0 +1,25 @@
+[package]
+name = "signal-collector"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+common = { path = "../common" }
+tokio.workspace = true
+serde.workspace = true
+iceoryx2.workspace = true
+bytes.workspace = true
+zmq.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+async-trait.workspace = true
+crossbeam.workspace = true
+dashmap.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+once_cell.workspace = true
+futures.workspace = true

@@ -1,0 +1,44 @@
+# 交易所配置文件
+# 定义所有交易所的基本信息和对应的符号文件
+
+[[exchange]]
+id = 1
+name = "binance_spot"
+type = "spot"
+description = "币安现货"
+symbols_file = "symbols/binance_spot.csv"
+
+[[exchange]]
+id = 2
+name = "binance_futures"
+type = "futures"
+description = "币安期货"
+symbols_file = "symbols/binance_futures.csv"
+
+[[exchange]]
+id = 3
+name = "bybit-spot"
+type = "spot"
+description = "Bybit现货"
+symbols_file = "symbols/bybit_spot.csv"
+
+[[exchange]]
+id = 4
+name = "bybit"
+type = "futures"
+description = "Bybit期货"
+symbols_file = "symbols/bybit_futures.csv"
+
+[[exchange]]
+id = 5
+name = "okex"
+type = "spot"
+description = "OKEx现货"
+symbols_file = "symbols/okex_spot.csv"
+
+[[exchange]]
+id = 6
+name = "okex-swap"
+type = "futures"
+description = "OKEx永续合约"
+symbols_file = "symbols/okex_futures.csv"

@@ -1,0 +1,16 @@
+[package]
+name = "common"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+toml = "0.8"
+anyhow.workspace = true

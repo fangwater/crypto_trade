@@ -1,0 +1,110 @@
+warning: methods `get_status`, `get_status_by_type`, `get_last_signal`, `unregister_trigger`, and `get_all_signals` are never used
+  --> signal-collector/src/signal_manager.rs:65:12
+   |
+8  | impl SignalManager {
+   | ------------------ methods in this implementation
+...
+65 |     pub fn get_status(&self, signal_idx: usize) -> Option<&SignalStatus> {
+   |            ^^^^^^^^^^
+...
+69 |     pub fn get_status_by_type(&self, signal_type: SignalType) -> Option<&SignalStatus> {
+   |            ^^^^^^^^^^^^^^^^^^
+...
+74 |     pub fn get_last_signal(&self, signal_idx: usize) -> Option<&Signal> {
+   |            ^^^^^^^^^^^^^^^
+...
+91 |     pub fn unregister_trigger(&mut self, signal_idx: usize, trigger_idx: usize) {
+   |            ^^^^^^^^^^^^^^^^^^
+...
+97 |     pub fn get_all_signals(&self) -> Vec<&Signal> {
+   |            ^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: method `priority` is never used
+  --> signal-collector/src/trigger.rs:11:8
+   |
+9  | pub trait Trigger {
+   |           ------- method in this trait
+10 |     fn name(&self) -> &str;
+11 |     fn priority(&self) -> Priority;
+   |        ^^^^^^^^
+
+warning: method `get_trigger_by_name` is never used
+  --> signal-collector/src/trigger.rs:40:12
+   |
+20 | impl TriggerRegistry {
+   | -------------------- method in this implementation
+...
+40 |     pub fn get_trigger_by_name(&self, name: &str) -> Option<(usize, Rc<dyn Trigger>)> {
+   |            ^^^^^^^^^^^^^^^^^^^
+
+warning: field `spread_threshold` is never read
+  --> signal-collector/src/trigger.rs:71:5
+   |
+69 | pub struct MTTrigger {
+   |            --------- field in this struct
+70 |     // 配置参数
+71 |     spread_threshold: f64,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: `signal-collector` (bin "signal-collector") generated 4 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+     Running `target/debug/signal-collector`
+[2m2025-08-31T11:43:49.440695Z[0m [32m INFO[0m [2msignal_collector[0m[2m:[0m Starting Signal Collector Process
+[2m2025-08-31T11:43:49.441324Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Starting ZMQ subscribers for endpoints: ["tcp://127.0.0.1:5555", "tcp://127.0.0.1:5556"]
+[2m2025-08-31T11:43:49.441463Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Starting IceOryx subscriber for 2 topics
+[2m2025-08-31T11:43:49.441510Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Creating subscriber node with name: sub52907
+        2 [W] "Config::global_config()" 
+| Default config file found but unable to read data, populate config with default values. 
+[2m2025-08-31T11:43:49.443302Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m ZMQ subscriber ready for endpoint: tcp://127.0.0.1:5555
+[2m2025-08-31T11:43:49.443384Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m ZMQ subscriber ready for endpoint: tcp://127.0.0.1:5556
+[2m2025-08-31T11:43:49.446459Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Subscriber ready for topic: signals/adaptive_spread
+[2m2025-08-31T11:43:49.447090Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Subscriber ready for topic: signals/funding_rate
+[2m2025-08-31T11:43:49.548488Z[0m [32m INFO[0m [2msignal_collector[0m[2m:[0m All subscribers and publishers started
+[2m2025-08-31T11:43:49.548517Z[0m [32m INFO[0m [2msignal_collector::ipc_publisher[0m[2m:[0m Starting IceOryx publisher thread for topic: events/trading
+[2m2025-08-31T11:43:49.556340Z[0m [32m INFO[0m [2msignal_collector::ipc_publisher[0m[2m:[0m Service ready for topic: events/trading
+[2m2025-08-31T11:43:49.556717Z[0m [32m INFO[0m [2msignal_collector::ipc_publisher[0m[2m:[0m IceOryx publisher ready for topic: events/trading
+[2m2025-08-31T11:43:53.300207Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Received message #1 on topic signals/adaptive_spread, raw size: 1024 bytes
+[2m2025-08-31T11:43:53.300316Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m First 50 bytes: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 33, 172, 46, 115, 72, 244, 232, 63, 40, 78, 197, 34, 171, 211, 82, 63, 154, 153, 153, 153, 153, 153, 233, 63, 120, 225, 240, 255, 152, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+[2m2025-08-31T11:43:53.300423Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Attempting to deserialize 44 bytes for signal type 0
+[2m2025-08-31T11:43:53.300468Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Successfully deserialized signal from topic signals/adaptive_spread
+[2m2025-08-31T11:43:53.300557Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Received message #1 on topic signals/funding_rate, raw size: 1024 bytes
+[2m2025-08-31T11:43:53.300589Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m First 50 bytes: [2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 79, 241, 253, 115, 78, 245, 22, 191, 0, 0, 0, 0, 120, 225, 240, 255, 152, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+[2m2025-08-31T11:43:53.300638Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Attempting to deserialize 32 bytes for signal type 2
+[2m2025-08-31T11:43:53.300667Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Successfully deserialized signal from topic signals/funding_rate
+[2m2025-08-31T11:43:55.290167Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Received message #2 on topic signals/adaptive_spread, raw size: 1024 bytes
+[2m2025-08-31T11:43:55.290227Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m First 50 bytes: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 244, 226, 83, 234, 253, 100, 232, 63, 49, 34, 231, 216, 215, 100, 81, 63, 154, 153, 153, 153, 153, 153, 233, 63, 78, 233, 240, 255, 152, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+[2m2025-08-31T11:43:55.290248Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Attempting to deserialize 44 bytes for signal type 0
+[2m2025-08-31T11:43:55.290270Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Successfully deserialized signal from topic signals/adaptive_spread
+[2m2025-08-31T11:43:55.290327Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Received message #2 on topic signals/funding_rate, raw size: 1024 bytes
+[2m2025-08-31T11:43:55.290338Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m First 50 bytes: [2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 103, 225, 146, 225, 211, 88, 54, 63, 0, 0, 0, 0, 78, 233, 240, 255, 152, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+[2m2025-08-31T11:43:55.290352Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Attempting to deserialize 32 bytes for signal type 2
+[2m2025-08-31T11:43:55.290361Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Successfully deserialized signal from topic signals/funding_rate
+[2m2025-08-31T11:43:55.847588Z[0m [33m WARN[0m [2msignal_collector::ipc_publisher[0m[2m:[0m Node received termination signal
+[2m2025-08-31T11:43:55.847692Z[0m [32m INFO[0m [2msignal_collector::ipc_publisher[0m[2m:[0m Publisher thread for topic events/trading shutting down
+[2m2025-08-31T11:53:22.697299Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Received message #3 on topic signals/adaptive_spread, raw size: 1024 bytes
+[2m2025-08-31T11:53:22.698174Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m First 50 bytes: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 202, 189, 2, 211, 179, 246, 232, 63, 32, 113, 238, 187, 220, 217, 82, 63, 154, 153, 153, 153, 153, 153, 233, 63, 164, 145, 249, 255, 152, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+[2m2025-08-31T11:53:22.698199Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Attempting to deserialize 44 bytes for signal type 0
+[2m2025-08-31T11:53:22.698235Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Successfully deserialized signal from topic signals/adaptive_spread
+[2m2025-08-31T11:53:22.698286Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Received message #3 on topic signals/funding_rate, raw size: 1024 bytes
+[2m2025-08-31T11:53:22.698307Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m First 50 bytes: [2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 251, 84, 214, 230, 217, 123, 38, 63, 0, 0, 0, 0, 164, 145, 249, 255, 152, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+[2m2025-08-31T11:53:22.698322Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Attempting to deserialize 32 bytes for signal type 2
+[2m2025-08-31T11:53:22.698331Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Successfully deserialized signal from topic signals/funding_rate
+[2m2025-08-31T11:53:24.676528Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Received message #4 on topic signals/adaptive_spread, raw size: 1024 bytes
+[2m2025-08-31T11:53:24.676650Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m First 50 bytes: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 87, 74, 5, 27, 167, 20, 234, 63, 14, 94, 91, 34, 229, 181, 85, 63, 154, 153, 153, 153, 153, 153, 233, 63, 121, 153, 249, 255, 152, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+[2m2025-08-31T11:53:24.676704Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Attempting to deserialize 44 bytes for signal type 0
+[2m2025-08-31T11:53:24.676739Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Successfully deserialized signal from topic signals/adaptive_spread
+[2m2025-08-31T11:53:24.676818Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Received message #4 on topic signals/funding_rate, raw size: 1024 bytes
+[2m2025-08-31T11:53:24.676848Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m First 50 bytes: [2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 43, 152, 65, 238, 158, 234, 241, 190, 0, 0, 0, 0, 121, 153, 249, 255, 152, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+[2m2025-08-31T11:53:24.676876Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Attempting to deserialize 32 bytes for signal type 2
+[2m2025-08-31T11:53:24.676896Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Successfully deserialized signal from topic signals/funding_rate
+[2m2025-08-31T11:53:26.656192Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Received message #5 on topic signals/adaptive_spread, raw size: 1024 bytes
+[2m2025-08-31T11:53:26.656259Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m First 50 bytes: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 206, 11, 206, 252, 127, 47, 238, 63, 88, 238, 15, 45, 8, 28, 96, 63, 154, 153, 153, 153, 153, 153, 233, 63, 78, 161, 249, 255, 152, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+[2m2025-08-31T11:53:26.656282Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Attempting to deserialize 44 bytes for signal type 0
+[2m2025-08-31T11:53:26.656303Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Successfully deserialized signal from topic signals/adaptive_spread
+[2m2025-08-31T11:53:26.656341Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Received message #5 on topic signals/funding_rate, raw size: 1024 bytes
+[2m2025-08-31T11:53:26.656354Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m First 50 bytes: [2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 31, 240, 109, 217, 242, 50, 49, 191, 0, 0, 0, 0, 78, 161, 249, 255, 152, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+[2m2025-08-31T11:53:26.656368Z[0m [34mDEBUG[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Attempting to deserialize 32 bytes for signal type 2
+[2m2025-08-31T11:53:26.656378Z[0m [32m INFO[0m [2msignal_collector::ipc_subscriber[0m[2m:[0m Successfully deserialized signal from topic signals/funding_rate
+Error: channel closed

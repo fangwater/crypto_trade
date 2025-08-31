@@ -1,0 +1,75 @@
+use anyhow::Result;
+use tracing::{info, error};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use chrono::Utc;
+use common::signals::*;
+use common::types::{Symbol, Exchange};
+use rand::Rng;
+
+fn main() -> Result<()> {
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
+
+    info!("Starting ZMQ Signal Generator");
+    
+    let ctx = zmq::Context::new();
+    
+    // 创建两个发布者，模拟不同的信号源
+    let publisher1 = ctx.socket(zmq::PUB)?;
+    publisher1.bind("tcp://127.0.0.1:5555")?;
+    
+    let publisher2 = ctx.socket(zmq::PUB)?;
+    publisher2.bind("tcp://127.0.0.1:5556")?;
+    
+    let mut rng = rand::thread_rng();
+    let symbol = Symbol(1); // BTC-USDT
+    
+    std::thread::sleep(std::time::Duration::from_secs(1)); // 等待订阅者连接
+    
+    loop {
+        // Publisher 1: 发送固定价差偏离信号
+        let spread_var = rng.gen_range(-1.0..2.0);
+        let fixed_signal = Signal::FixedSpreadDeviation(FixedSpreadDeviationSignal {
+            symbol,
+            exchange: Exchange::OKX,
+            current_spread: 0.001 + 0.0008 * spread_var,
+            fixed_threshold: 0.0015,
+            timestamp: Utc::now(),
+        });
+        
+        let bytes = fixed_signal.to_bytes();
+        match publisher1.send(&bytes[..], 0) {
+            Ok(_) => info!("ZMQ发送固定价差信号"),
+            Err(e) => error!("发送失败: {}", e),
+        }
+        
+        // Publisher 2: 发送实时资金费率风险信号
+        let risk_level = match rng.gen_range(0..4) {
+            0 => RiskLevel::Low,
+            1 => RiskLevel::Medium,
+            2 => RiskLevel::High,
+            _ => RiskLevel::Critical,
+        };
+        
+        let funding_var = rng.gen_range(0.5..3.0);
+        let cost_var = rng.gen_range(0.1..5.0);
+        let risk_signal = Signal::RealTimeFundingRisk(RealTimeFundingRiskSignal {
+            symbol,
+            exchange: Exchange::Bybit,
+            risk_level,
+            funding_rate: 0.0003 * funding_var,
+            position_cost: 100.0 * cost_var,
+            timestamp: Utc::now(),
+        });
+        
+        let bytes = risk_signal.to_bytes();
+        match publisher2.send(&bytes[..], 0) {
+            Ok(_) => info!("ZMQ发送风险信号: {:?}", risk_level),
+            Err(e) => error!("发送失败: {}", e),
+        }
+        
+        std::thread::sleep(std::time::Duration::from_secs(3));
+    }
+}

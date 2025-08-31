@@ -1,0 +1,35 @@
+[package]
+name = "test-signal-generator"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "ice-signal-generator"
+path = "src/ice_generator.rs"
+
+[[bin]]
+name = "ice-broadcast-generator"
+path = "src/ice_broadcast_generator.rs"
+
+[[bin]]
+name = "ice-mpsc-generator"
+path = "src/ice_mpsc_generator_fixed.rs"
+
+[[bin]]
+name = "test-runner"
+path = "src/test_runner.rs"
+
+[dependencies]
+common = { path = "../common" }
+tokio.workspace = true
+serde.workspace = true
+iceoryx2.workspace = true
+bytes.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+rand = "0.8"
