@@ -129,6 +129,11 @@ impl MarketConfig {
         self.exchange_id_by_name.get(name).copied()
     }
     
+    /// 根据ID获取交易所名称
+    pub fn get_exchange_name(&self, exchange_id: u32) -> Option<String> {
+        self.exchange_by_id.get(&exchange_id).map(|e| e.name.clone())
+    }
+    
     /// 获取交易所的所有符号
     pub fn get_symbols(&self, exchange_id: u32) -> Option<&Vec<SymbolConfig>> {
         self.symbols_by_exchange.get(&exchange_id)

@@ -7,20 +7,21 @@ use std::cell::RefCell;
 use tokio::sync::mpsc;
 use tokio::select;
 use tokio::time::{interval, Duration};
-use tracing::{info, error, warn, debug};
+use tracing::{info, error, debug};
 use anyhow::Result;
 
 use iceoryx2::prelude::*;
+use iceoryx2::port::subscriber::Subscriber;
 use common::types::{Signal, ExecutionReport};
 use common::ipc::{IPC_SERVICE_SIGNAL, IPC_SERVICE_EXECUTION};
 
 use crate::pipeline::{
-    pipeline::{Pipeline, PreProcessContext, PostProcessContext, execute_pre_pipeline, execute_post_pipeline},
+    pipeline::{PreProcessContext, PostProcessContext, execute_pre_pipeline, execute_post_pipeline},
     shared_state::SharedState,
 };
 use crate::risk_control::{
     risk_state::RiskState,
-    risk_rules::create_default_rule_chain,
+    risk_initializer::RiskInitializer,
 };
 use crate::order::order_manager::OrderManager;
 
@@ -31,6 +32,9 @@ pub struct PrePostProcessor {
     
     // 风控状态
     risk_state: RiskState,
+    
+    // 风控初始化器
+    risk_initializer: RiskInitializer,
     
     // 订单管理器
     order_manager: OrderManager,
@@ -54,6 +58,7 @@ impl PrePostProcessor {
         Self {
             shared_state: Rc::new(RefCell::new(SharedState::new())),
             risk_state: RiskState::new(),
+            risk_initializer: RiskInitializer::new(),
             order_manager: OrderManager::new(),
             pre_queue_rx: pre_rx,
             pre_queue_tx: pre_tx,
@@ -112,11 +117,11 @@ impl PrePostProcessor {
     }
     
     /// 设置信号订阅
-    fn setup_signal_subscriber(&self) -> Result<Subscriber<Signal>> {
-        let node = NodeBuilder::new().create::<ipc::Service>()?;
+    fn setup_signal_subscriber(&self) -> Result<Subscriber<iceoryx2::service::ipc::Service, Signal, ()>> {
+        let node = NodeBuilder::new().create::<iceoryx2::service::ipc::Service>()?;
         
         let service = node
-            .service_builder(IPC_SERVICE_SIGNAL)
+            .service_builder(&iceoryx2::prelude::ServiceName::new(IPC_SERVICE_SIGNAL)?)
             .publish_subscribe::<Signal>()
             .open_or_create()?;
         
@@ -129,11 +134,11 @@ impl PrePostProcessor {
     }
     
     /// 设置执行报告订阅
-    fn setup_execution_subscriber(&self) -> Result<Subscriber<ExecutionReport>> {
-        let node = NodeBuilder::new().create::<ipc::Service>()?;
+    fn setup_execution_subscriber(&self) -> Result<Subscriber<iceoryx2::service::ipc::Service, ExecutionReport, ()>> {
+        let node = NodeBuilder::new().create::<iceoryx2::service::ipc::Service>()?;
         
         let service = node
-            .service_builder(IPC_SERVICE_EXECUTION)
+            .service_builder(&iceoryx2::prelude::ServiceName::new(IPC_SERVICE_EXECUTION)?)
             .publish_subscribe::<ExecutionReport>()
             .open_or_create()?;
         
@@ -147,7 +152,7 @@ impl PrePostProcessor {
     
     /// 轮询信号
     async fn poll_signals(
-        subscriber: &Subscriber<Signal>,
+        subscriber: &Subscriber<iceoryx2::service::ipc::Service, Signal, ()>,
         tx: &mpsc::UnboundedSender<Signal>
     ) {
         while let Some(sample) = subscriber.receive().unwrap() {
@@ -162,7 +167,7 @@ impl PrePostProcessor {
     
     /// 轮询执行报告
     async fn poll_executions(
-        subscriber: &Subscriber<ExecutionReport>,
+        subscriber: &Subscriber<iceoryx2::service::ipc::Service, ExecutionReport, ()>,
         tx: &mpsc::UnboundedSender<ExecutionReport>
     ) {
         while let Some(sample) = subscriber.receive().unwrap() {
@@ -179,12 +184,38 @@ impl PrePostProcessor {
     async fn process_signal(&mut self, signal: Signal) -> Result<()> {
         debug!("Processing signal: {}", signal.id);
         
+        // 检查是否为风控初始化消息
+        if signal.signal_type == common::types::SignalType::RiskControlInit {
+            info!("Processing risk control initialization signal");
+            
+            match self.risk_initializer.process_init_signal(&signal) {
+                Ok(response) => {
+                    if response.success {
+                        // 获取初始化后的风控状态
+                        self.risk_state = self.risk_initializer.get_risk_state().clone();
+                        info!("Risk control initialized: {}", response.message);
+                        
+                        // 更新共享状态中的风控信息
+                        self.shared_state.borrow_mut().update_risk_state(self.risk_state.get_summary());
+                    } else {
+                        error!("Risk control initialization failed: {}", response.message);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to process risk control init signal: {}", e);
+                }
+            }
+            
+            self.processed_signals += 1;
+            return Ok(());
+        }
+        
         // 创建Pipeline上下文
         let ctx = PreProcessContext::new(signal.clone(), self.shared_state.clone());
         
         // 执行Pre-process Pipeline（链式调用）
         match execute_pre_pipeline(ctx).await {
-            Ok(Some(order)) => {
+            Ok(Some(_order)) => {
                 // 创建订单
                 let order = self.order_manager.create_order_from_signal(signal)?;
                 
@@ -252,7 +283,7 @@ impl PrePostProcessor {
         self.risk_state.check_daily_reset();
         
         // 清理共享状态中的过期数据
-        let mut state = self.shared_state.borrow_mut();
+        let state = self.shared_state.borrow_mut();
         state.persist();
     }
 }

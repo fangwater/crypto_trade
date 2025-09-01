@@ -2,8 +2,7 @@ use anyhow::Result;
 use tracing::{info, error, debug};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use iceoryx2::prelude::*;
-use chrono::Utc;
-use common::signals::*;
+use common::types::{Signal, SignalType, SignalData, FundingDirection};
 use common::config::MarketConfig;
 use rand::Rng;
 use core::time::Duration;
@@ -93,14 +92,20 @@ async fn main() -> Result<()> {
                 
                 // 生成自适应价差信号
                 let spread_variation = rng.gen_range(-1.0..1.0);
-                let adaptive_signal = Signal::AdaptiveSpreadDeviation(AdaptiveSpreadDeviationSignal {
-                    exchange_id,
-                    symbol_id: symbol.id,
-                    spread_percentile: 0.85 + 0.1 * spread_variation,
-                    current_spread: 0.0015 + 0.0005 * spread_variation,
-                    threshold_percentile: 0.8,
-                    timestamp: Utc::now(),
-                });
+                let adaptive_signal = Signal::new(
+                    SignalType::AdaptiveSpreadDeviation,
+                    SignalData::AdaptiveSpreadDeviation {
+                        exchange_id,
+                        symbol_id: symbol.id,
+                        spread_percentile: 0.85 + 0.1 * spread_variation,
+                        current_spread: 0.0015 + 0.0005 * spread_variation,
+                        threshold_percentile: 0.8,
+                    }
+                );
+                // 设置其他字段
+                let mut adaptive_signal = adaptive_signal;
+                adaptive_signal.symbol = symbol.symbol.clone();
+                adaptive_signal.exchange = market_config.get_exchange_name(exchange_id).unwrap_or("unknown".to_string());
                 
                 let bytes = adaptive_signal.to_bytes();
                 debug!("Adaptive signal serialized to {} bytes", bytes.len());
@@ -134,13 +139,19 @@ async fn main() -> Result<()> {
                 };
                 
                 let funding_variation = rng.gen_range(-2.0..3.0);
-                let funding_signal = Signal::FundingRateDirection(FundingRateDirectionSignal {
-                    exchange_id,
-                    symbol_id: symbol.id,
-                    funding_rate: 0.0002 * funding_variation,
-                    direction: funding_direction,
-                    timestamp: Utc::now(),
-                });
+                let funding_signal = Signal::new(
+                    SignalType::FundingRateDirection,
+                    SignalData::FundingRateDirection {
+                        exchange_id,
+                        symbol_id: symbol.id,
+                        funding_rate: 0.0002 * funding_variation,
+                        direction: funding_direction,
+                    }
+                );
+                // 设置其他字段
+                let mut funding_signal = funding_signal;
+                funding_signal.symbol = symbol.symbol.clone();
+                funding_signal.exchange = market_config.get_exchange_name(exchange_id).unwrap_or("unknown".to_string());
                 
                 let bytes = funding_signal.to_bytes();
                 debug!("Funding signal serialized to {} bytes", bytes.len());

@@ -2,9 +2,12 @@ use anyhow::Result;
 use std::rc::Rc;
 use std::cell::RefCell;
 use tracing::{debug, instrument};
+use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 
 use crate::pipeline::shared_state::SharedState;
-use common::types::{ExecutionReport, Order, Signal};
+use crate::order::order::Order;
+use common::types::{ExecutionReport, Signal, SignalType};
 
 pub trait Pipeline<T> {
     fn pipe<U, F>(self, f: F) -> U
@@ -172,9 +175,17 @@ fn check_risk_control(ctx: PreProcessContext) -> PreProcessContext {
         return ctx;
     }
     
-    let state = ctx.shared_state.borrow();
-    if !state.risk_check(&ctx.signal) {
-        debug!("Risk control check failed");
+    let should_stop = {
+        let state = ctx.shared_state.borrow();
+        if !state.risk_check(&ctx.signal) {
+            debug!("Risk control check failed");
+            true
+        } else {
+            false
+        }
+    };
+    
+    if should_stop {
         return ctx.stop();
     }
     
@@ -187,9 +198,21 @@ fn check_position_limit(ctx: PreProcessContext) -> PreProcessContext {
         return ctx;
     }
     
-    let state = ctx.shared_state.borrow();
-    if !state.position_check(&ctx.signal.symbol, ctx.signal.quantity) {
-        debug!("Position limit check failed");
+    let should_stop = {
+        let state = ctx.shared_state.borrow();
+        let quantity = ctx.signal.quantity
+            .and_then(|q| Decimal::from_f64(q))
+            .unwrap_or(Decimal::ZERO);
+        
+        if !state.position_check(&ctx.signal.symbol, quantity) {
+            debug!("Position limit check failed");
+            true
+        } else {
+            false
+        }
+    };
+    
+    if should_stop {
         return ctx.stop();
     }
     
@@ -214,9 +237,10 @@ fn assign_priority(mut ctx: PreProcessContext) -> PreProcessContext {
     }
     
     let priority = match ctx.signal.signal_type {
-        common::types::SignalType::Arbitrage => 10,
-        common::types::SignalType::Market => 5,
-        common::types::SignalType::Hedge => 8,
+        SignalType::Arbitrage => 10,
+        SignalType::Market => 5,
+        SignalType::Hedge => 8,
+        _ => 1,
     };
     
     ctx.priority = priority;
@@ -233,8 +257,10 @@ fn update_position(ctx: PostProcessContext) -> PostProcessContext {
         return ctx;
     }
     
-    let mut state = ctx.shared_state.borrow_mut();
-    state.update_position(&ctx.report);
+    {
+        let mut state = ctx.shared_state.borrow_mut();
+        state.update_position(&ctx.report);
+    }
     ctx
 }
 
@@ -244,8 +270,10 @@ fn update_risk_quota(ctx: PostProcessContext) -> PostProcessContext {
         return ctx;
     }
     
-    let mut state = ctx.shared_state.borrow_mut();
-    state.update_risk_quota(&ctx.report);
+    {
+        let mut state = ctx.shared_state.borrow_mut();
+        state.update_risk_quota(&ctx.report);
+    }
     ctx
 }
 
@@ -255,9 +283,11 @@ fn check_hedge_trigger(ctx: PostProcessContext) -> PostProcessContext {
         return ctx;
     }
     
-    let state = ctx.shared_state.borrow();
-    if state.should_trigger_hedge(&ctx.report.symbol) {
-        debug!("Hedge trigger detected for {}", ctx.report.symbol);
+    {
+        let state = ctx.shared_state.borrow();
+        if state.should_trigger_hedge(&format!("{:?}", ctx.report.symbol)) {
+            debug!("Hedge trigger detected for {:?}", ctx.report.symbol);
+        }
     }
     
     ctx
@@ -269,8 +299,10 @@ fn calculate_pnl(ctx: PostProcessContext) -> PostProcessContext {
         return ctx;
     }
     
-    let mut state = ctx.shared_state.borrow_mut();
-    state.calculate_pnl(&ctx.report);
+    {
+        let mut state = ctx.shared_state.borrow_mut();
+        state.calculate_pnl(&ctx.report);
+    }
     ctx
 }
 
@@ -280,7 +312,9 @@ fn persist_state(ctx: PostProcessContext) -> PostProcessContext {
         return ctx;
     }
     
-    let state = ctx.shared_state.borrow();
-    state.persist();
+    {
+        let state = ctx.shared_state.borrow();
+        state.persist();
+    }
     ctx
 }

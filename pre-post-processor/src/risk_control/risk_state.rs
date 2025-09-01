@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use chrono::{DateTime, Utc, Timelike};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 use tracing::{debug, info, warn};
 
 use common::types::{Signal, ExecutionReport, OrderStatus};
 use crate::risk_control::risk_calculator::RiskMetrics;
 
 /// 风控状态 - 管理所有风控相关的状态信息
+#[derive(Clone)]
 pub struct RiskState {
     // 品种级别的风控状态
     pub symbol_states: HashMap<String, SymbolRiskState>,
@@ -234,7 +236,11 @@ impl RiskState {
         symbol_state.pending_orders += 1;
         
         // 更新全局统计
-        self.global_state.total_exposure += (signal.price * signal.quantity).abs();
+        let notional = signal.price
+            .and_then(|p| signal.quantity.map(|q| p * q))
+            .and_then(|n| Decimal::from_f64(n.abs()))
+            .unwrap_or(Decimal::ZERO);
+        self.global_state.total_exposure += notional;
         self.global_state.update_risk_level();
         
         true
@@ -242,17 +248,21 @@ impl RiskState {
     
     /// 处理执行报告 - 更新风控状态
     pub fn process_execution(&mut self, report: &ExecutionReport) {
+        let symbol_str = format!("{:?}", report.symbol);
         let symbol_state = self.symbol_states
-            .entry(report.symbol.clone())
-            .or_insert_with(|| SymbolRiskState::new(report.symbol.clone()));
+            .entry(symbol_str.clone())
+            .or_insert_with(|| SymbolRiskState::new(symbol_str));
         
         // 更新仓位和资金
+        let filled_quantity = Decimal::from_f64(report.filled_quantity).unwrap_or(Decimal::ZERO);
+        let price = Decimal::from_f64(report.price).unwrap_or(Decimal::ZERO);
+        
         if report.side == common::types::Side::Buy {
-            symbol_state.position += report.executed_quantity;
-            symbol_state.capital_used += report.executed_price * report.executed_quantity;
+            symbol_state.position += filled_quantity;
+            symbol_state.capital_used += price * filled_quantity;
         } else {
-            symbol_state.position -= report.executed_quantity;
-            symbol_state.capital_used -= report.executed_price * report.executed_quantity;
+            symbol_state.position -= filled_quantity;
+            symbol_state.capital_used -= price * filled_quantity;
         }
         
         // 更新交易统计

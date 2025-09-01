@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
     info!("All subscribers and publishers started");
 
     while let Some(signal_msg) = signal_rx.recv().await {
-        let signal_type = signal_msg.signal.signal_type();
+        let signal_type = signal_msg.signal.signal_type;  // 直接访问字段，不是方法
         
         signal_manager.update_signal(signal_msg.signal.clone());
         

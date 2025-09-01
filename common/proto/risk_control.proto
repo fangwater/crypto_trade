@@ -1,0 +1,310 @@
+syntax = "proto3";
+
+package risk_control;
+
+// 风控初始化请求
+message RiskInitRequest {
+  // 全局风控配置
+  GlobalRiskConfig global_config = 1;
+  
+  // 各品种的初始状态
+  repeated SymbolInitState symbol_states = 2;
+  
+  // 初始持仓信息
+  repeated InitialPosition positions = 3;
+  
+  // 风控规则配置
+  RiskRulesConfig rules_config = 4;
+  
+  // 历史数据（可选，用于恢复状态）
+  HistoricalData historical_data = 5;
+}
+
+// 全局风控配置
+message GlobalRiskConfig {
+  // 最大总敞口限制（比例）
+  double max_total_exposure_ratio = 1;
+  
+  // 最大持仓品种数
+  uint32 max_position_symbols = 2;
+  
+  // 日内最大交易次数
+  uint32 max_daily_trades = 3;
+  
+  // 日内最大亏损限制
+  double max_daily_loss = 4;
+  
+  // 总资金量
+  double total_capital = 5;
+  
+  // 风险系数
+  double risk_multiplier = 6;
+  
+  // 是否启用全局风控
+  bool enable_global_risk_control = 7;
+}
+
+// 品种初始状态
+message SymbolInitState {
+  // 品种标识
+  string symbol = 1;
+  
+  // 当前仓位
+  double position = 2;
+  
+  // 占用资金
+  double capital_used = 3;
+  
+  // 挂单数量
+  uint32 pending_orders = 4;
+  
+  // 今日已交易次数
+  uint32 daily_trades = 5;
+  
+  // 已实现盈亏
+  double realized_pnl = 6;
+  
+  // 未实现盈亏
+  double unrealized_pnl = 7;
+  
+  // 是否被限制交易
+  bool is_restricted = 8;
+  
+  // 限制原因
+  string restriction_reason = 9;
+  
+  // 限制结束时间（Unix时间戳）
+  int64 restriction_until = 10;
+  
+  // 品种特定的配置
+  SymbolRiskConfig symbol_config = 11;
+}
+
+// 品种风控配置
+message SymbolRiskConfig {
+  // 最大仓位限制
+  double max_position = 1;
+  
+  // 最大占用资金
+  double max_capital_used = 2;
+  
+  // 最大挂单数
+  uint32 max_pending_orders = 3;
+  
+  // 时间窗口内最大交易次数
+  uint32 max_trades_per_window = 4;
+  
+  // 时间窗口大小（秒）
+  uint32 time_window_seconds = 5;
+  
+  // 止损比例
+  double stop_loss_ratio = 6;
+  
+  // 是否启用该品种
+  bool enabled = 7;
+}
+
+// 初始持仓
+message InitialPosition {
+  // 品种
+  string symbol = 1;
+  
+  // 交易所
+  string exchange = 2;
+  
+  // 方向 (BUY/SELL)
+  string side = 3;
+  
+  // 数量
+  double quantity = 4;
+  
+  // 平均价格
+  double avg_price = 5;
+  
+  // 当前市场价格
+  double market_price = 6;
+  
+  // 未实现盈亏
+  double unrealized_pnl = 7;
+  
+  // 持仓时间（Unix时间戳）
+  int64 position_time = 8;
+}
+
+// 风控规则配置
+message RiskRulesConfig {
+  // 仓位规则
+  PositionRules position_rules = 1;
+  
+  // 频率控制规则
+  FrequencyRules frequency_rules = 2;
+  
+  // 盈亏规则
+  PnLRules pnl_rules = 3;
+  
+  // 市场条件规则
+  MarketRules market_rules = 4;
+  
+  // 时间规则
+  TimeRules time_rules = 5;
+}
+
+// 仓位规则
+message PositionRules {
+  // 单品种最大仓位比例
+  double max_single_position_ratio = 1;
+  
+  // 总仓位最大比例
+  double max_total_position_ratio = 2;
+  
+  // 相关品种最大仓位比例
+  double max_correlated_position_ratio = 3;
+  
+  // 是否启用
+  bool enabled = 4;
+}
+
+// 频率控制规则
+message FrequencyRules {
+  // 每分钟最大交易次数
+  uint32 max_trades_per_minute = 1;
+  
+  // 每小时最大交易次数
+  uint32 max_trades_per_hour = 2;
+  
+  // 每日最大交易次数
+  uint32 max_trades_per_day = 3;
+  
+  // 最小交易间隔（毫秒）
+  uint32 min_trade_interval_ms = 4;
+  
+  // 是否启用
+  bool enabled = 5;
+}
+
+// 盈亏规则
+message PnLRules {
+  // 日内最大亏损
+  double max_daily_loss = 1;
+  
+  // 单笔最大亏损
+  double max_single_loss = 2;
+  
+  // 连续亏损次数限制
+  uint32 max_consecutive_losses = 3;
+  
+  // 回撤限制
+  double max_drawdown = 4;
+  
+  // 是否启用
+  bool enabled = 5;
+}
+
+// 市场条件规则
+message MarketRules {
+  // 最大滑点容忍度
+  double max_slippage = 1;
+  
+  // 最小流动性要求
+  double min_liquidity = 2;
+  
+  // 波动率限制
+  double max_volatility = 3;
+  
+  // 是否启用
+  bool enabled = 4;
+}
+
+// 时间规则
+message TimeRules {
+  // 允许交易的时间段
+  repeated TradingWindow trading_windows = 1;
+  
+  // 禁止交易的日期（Unix时间戳）
+  repeated int64 blackout_dates = 2;
+  
+  // 是否启用
+  bool enabled = 3;
+}
+
+// 交易时间窗口
+message TradingWindow {
+  // 开始时间（HH:MM格式）
+  string start_time = 1;
+  
+  // 结束时间（HH:MM格式）
+  string end_time = 2;
+  
+  // 星期几（1-7，1表示周一）
+  repeated uint32 weekdays = 3;
+}
+
+// 历史数据（用于状态恢复）
+message HistoricalData {
+  // 历史盈亏记录
+  repeated PnLRecord pnl_records = 1;
+  
+  // 历史交易记录
+  repeated TradeRecord trade_records = 2;
+  
+  // 历史敞口记录
+  repeated ExposureRecord exposure_records = 3;
+}
+
+// 盈亏记录
+message PnLRecord {
+  int64 timestamp = 1;
+  string symbol = 2;
+  double value = 3;
+  string type = 4; // REALIZED/UNREALIZED
+}
+
+// 交易记录
+message TradeRecord {
+  int64 timestamp = 1;
+  string symbol = 2;
+  string side = 3;
+  double quantity = 4;
+  double price = 5;
+  double pnl = 6;
+}
+
+// 敞口记录
+message ExposureRecord {
+  int64 timestamp = 1;
+  double total_exposure = 2;
+  map<string, double> symbol_exposures = 3;
+}
+
+// 风控初始化响应
+message RiskInitResponse {
+  bool success = 1;
+  string message = 2;
+  
+  // 初始化后的状态摘要
+  RiskStateSummary state_summary = 3;
+}
+
+// 风控状态摘要
+message RiskStateSummary {
+  // 总敞口
+  double total_exposure = 1;
+  
+  // 风险等级
+  string risk_level = 2;
+  
+  // 活跃持仓数
+  uint32 active_positions = 3;
+  
+  // 可用资金
+  double available_capital = 4;
+  
+  // 今日盈亏
+  double daily_pnl = 5;
+  
+  // 受限品种列表
+  repeated string restricted_symbols = 6;
+  
+  // 全局限制状态
+  bool global_restricted = 7;
+}

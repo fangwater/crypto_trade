@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 use tracing::{debug, warn};
 
 use common::types::{Signal, ExecutionReport};
+use crate::risk_control::risk_state::RiskSummary;
 
 /// 仓位信息
 #[derive(Debug, Clone)]
@@ -69,6 +71,7 @@ impl RiskQuota {
 }
 
 /// 共享状态 - 单线程环境，不需要Arc/Mutex
+#[derive(Debug)]
 pub struct SharedState {
     pub positions: HashMap<String, PositionInfo>,     // 所有仓位
     pub risk_quotas: HashMap<String, RiskQuota>,      // 风控配额
@@ -96,11 +99,20 @@ impl SharedState {
     #[inline]
     pub fn risk_check(&self, signal: &Signal) -> bool {
         // 获取该品种的风控配额，如果没有则使用默认值
+        let default_quota = RiskQuota::new();
         let quota = self.risk_quotas.get(&signal.symbol)
-            .unwrap_or(&RiskQuota::new());
+            .unwrap_or(&default_quota);
         
         // 检查配额限制
-        if !quota.can_trade(signal.quantity, signal.price * signal.quantity) {
+        let quantity = signal.quantity
+            .and_then(|q| Decimal::from_f64(q))
+            .unwrap_or(Decimal::ZERO);
+        let notional = signal.price
+            .and_then(|p| signal.quantity.map(|q| p * q))
+            .and_then(|n| Decimal::from_f64(n))
+            .unwrap_or(Decimal::ZERO);
+        
+        if !quota.can_trade(quantity, notional) {
             debug!("Risk quota exceeded for {}", signal.symbol);
             return false;
         }
@@ -138,10 +150,11 @@ impl SharedState {
     
     /// 更新仓位 - 根据执行报告更新仓位信息
     pub fn update_position(&mut self, report: &ExecutionReport) {
+        let symbol_str = format!("{:?}", report.symbol);
         let position = self.positions
-            .entry(report.symbol.clone())
+            .entry(symbol_str.clone())
             .or_insert_with(|| PositionInfo {
-                symbol: report.symbol.clone(),
+                symbol: symbol_str.clone(),
                 quantity: Decimal::ZERO,
                 avg_price: Decimal::ZERO,
                 realized_pnl: Decimal::ZERO,
@@ -150,15 +163,20 @@ impl SharedState {
             });
         
         // 买入：更新均价和数量
+        let filled_quantity = Decimal::from_f64(report.filled_quantity).unwrap_or(Decimal::ZERO);
+        let price = Decimal::from_f64(report.price).unwrap_or(Decimal::ZERO);
+        
         if report.side == common::types::Side::Buy {
-            let new_quantity = position.quantity + report.executed_quantity;
-            position.avg_price = (position.avg_price * position.quantity 
-                + report.executed_price * report.executed_quantity) / new_quantity;
+            let new_quantity = position.quantity + filled_quantity;
+            if new_quantity != Decimal::ZERO {
+                position.avg_price = (position.avg_price * position.quantity 
+                    + price * filled_quantity) / new_quantity;
+            }
             position.quantity = new_quantity;
         } else {
             // 卖出：计算已实现盈亏
-            position.quantity -= report.executed_quantity;
-            let pnl = (report.executed_price - position.avg_price) * report.executed_quantity;
+            position.quantity -= filled_quantity;
+            let pnl = (price - position.avg_price) * filled_quantity;
             position.realized_pnl += pnl;
         }
         
@@ -169,11 +187,14 @@ impl SharedState {
     /// 更新风控配额使用情况
     pub fn update_risk_quota(&mut self, report: &ExecutionReport) {
         let quota = self.risk_quotas
-            .entry(report.symbol.clone())
+            .entry(format!("{:?}", report.symbol))
             .or_insert_with(RiskQuota::new);
         
-        quota.current_position += report.executed_quantity;
-        quota.current_capital += report.executed_price * report.executed_quantity;
+        let filled_quantity = Decimal::from_f64(report.filled_quantity).unwrap_or(Decimal::ZERO);
+        let price = Decimal::from_f64(report.price).unwrap_or(Decimal::ZERO);
+        
+        quota.current_position += filled_quantity;
+        quota.current_capital += price * filled_quantity;
         quota.daily_trades += 1;
         quota.last_trade_time = Some(Utc::now());
         
@@ -196,13 +217,14 @@ impl SharedState {
     
     /// 计算盈亏
     pub fn calculate_pnl(&mut self, report: &ExecutionReport) {
-        if let Some(position) = self.positions.get_mut(&report.symbol) {
-            let market_price = report.executed_price;
+        let symbol_str = format!("{:?}", report.symbol);
+        if let Some(position) = self.positions.get_mut(&symbol_str) {
+            let market_price = Decimal::from_f64(report.price).unwrap_or(Decimal::ZERO);
             // 未实现盈亏 = (市价 - 均价) * 持仓量
             position.unrealized_pnl = (market_price - position.avg_price) * position.quantity;
             debug!(
                 "PnL for {}: realized={}, unrealized={}", 
-                report.symbol, 
+                symbol_str, 
                 position.realized_pnl, 
                 position.unrealized_pnl
             );
@@ -223,5 +245,34 @@ impl SharedState {
             debug!("Persisting state to disk");
             // TODO: 实际的持久化逻辑
         }
+    }
+    
+    /// 更新风控状态摘要
+    pub fn update_risk_state(&mut self, summary: RiskSummary) {
+        // 更新总敞口
+        self.total_exposure = summary.total_exposure;
+        
+        // 更新受限品种的风控配额
+        for symbol in &summary.restricted_symbols {
+            if let Some(quota) = self.risk_quotas.get_mut(symbol) {
+                // 限制该品种的交易
+                quota.max_position = Decimal::ZERO;
+                quota.max_capital = Decimal::ZERO;
+                quota.max_pending_orders = 0;
+            }
+        }
+        
+        // 如果全局受限，限制所有品种
+        if summary.global_restricted {
+            for quota in self.risk_quotas.values_mut() {
+                quota.max_position = Decimal::ZERO;
+                quota.max_capital = Decimal::ZERO;
+                quota.max_pending_orders = 0;
+            }
+            warn!("Global risk control restriction applied");
+        }
+        
+        debug!("Risk state updated: level={:?}, exposure={}, active_positions={}", 
+               summary.risk_level, summary.total_exposure, summary.active_positions);
     }
 }

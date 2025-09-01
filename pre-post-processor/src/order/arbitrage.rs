@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 use tracing::{debug, info, warn};
 
 use crate::order::order_state::OrderState;
@@ -75,6 +76,7 @@ struct ArbitrageStats {
     active_pairs: usize,         // 活跃组合数
     completed_pairs: usize,      // 完成组合数
     successful_pairs: usize,     // 成功组合数
+    partial_success_pairs: usize, // 部分成功组合数
     failed_pairs: usize,         // 失败组合数
     total_expected_profit: Decimal, // 总预期利润
     total_actual_profit: Decimal,   // 总实际利润
@@ -88,6 +90,7 @@ impl ArbitrageStats {
             active_pairs: 0,
             completed_pairs: 0,
             successful_pairs: 0,
+            partial_success_pairs: 0,
             failed_pairs: 0,
             total_expected_profit: Decimal::ZERO,
             total_actual_profit: Decimal::ZERO,
@@ -183,7 +186,10 @@ impl ArbitrageManager {
         order_id: &str,
         new_status: OrderState,
     ) {
-        if let Some(pair) = self.pairs.get_mut(arbitrage_id) {
+        // 先更新订单状态，记录旧状态
+        let (old_state, new_state, is_terminal) = if let Some(pair) = self.pairs.get_mut(arbitrage_id) {
+            let old_state = pair.state;
+            
             // 更新对应订单的状态
             if pair.maker_order_id.as_deref() == Some(order_id) {
                 pair.maker_status = Some(new_status);
@@ -193,67 +199,60 @@ impl ArbitrageManager {
                 debug!("Updated taker status to {:?} for arbitrage {}", new_status, arbitrage_id);
             }
             
-            // 更新套利状态
-            self.update_arbitrage_state(pair);
-        }
-    }
-    
-    /// 更新套利状态
-    fn update_arbitrage_state(&mut self, pair: &mut ArbitragePair) {
-        let maker_filled = matches!(pair.maker_status, Some(OrderState::Filled));
-        let taker_filled = matches!(pair.taker_status, Some(OrderState::Filled));
-        let maker_failed = matches!(
-            pair.maker_status, 
-            Some(OrderState::Cancelled) | Some(OrderState::Rejected) | Some(OrderState::Failed)
-        );
-        let taker_failed = matches!(
-            pair.taker_status,
-            Some(OrderState::Cancelled) | Some(OrderState::Rejected) | Some(OrderState::Failed)
-        );
-        
-        let old_state = pair.state;
-        
-        pair.state = match (maker_filled, taker_filled, maker_failed, taker_failed) {
-            // 两边都成交 - 完成
-            (true, true, _, _) => {
-                pair.completed_at = Some(Utc::now());
-                self.calculate_actual_profit(pair);
-                ArbitrageState::Completed
-            }
-            // Maker成交，Taker失败 - 部分成功（需要对冲）
-            (true, false, _, true) => {
-                pair.completed_at = Some(Utc::now());
-                warn!("Arbitrage {} partial success: Maker filled but Taker failed", pair.id);
-                ArbitrageState::PartialSuccess
-            }
-            // Taker成交，Maker失败 - 部分成功（需要对冲）
-            (false, true, true, _) => {
-                pair.completed_at = Some(Utc::now());
-                warn!("Arbitrage {} partial success: Taker filled but Maker failed", pair.id);
-                ArbitrageState::PartialSuccess
-            }
-            // 两边都失败
-            (false, false, true, true) => {
-                pair.completed_at = Some(Utc::now());
-                ArbitrageState::Failed
-            }
-            // Maker成交，等待Taker
-            (true, false, _, false) => ArbitrageState::MakerFilled,
-            // 其他情况保持当前状态
-            _ => pair.state,
+            // 计算新状态
+            let maker_filled = matches!(pair.maker_status, Some(OrderState::Filled));
+            let taker_filled = matches!(pair.taker_status, Some(OrderState::Filled));
+            let maker_failed = matches!(pair.maker_status, Some(OrderState::Failed | OrderState::Cancelled | OrderState::Rejected));
+            let taker_failed = matches!(pair.taker_status, Some(OrderState::Failed | OrderState::Cancelled | OrderState::Rejected));
+            
+            pair.state = match (maker_filled, taker_filled, maker_failed, taker_failed) {
+                // 两边都成交 - 完成
+                (true, true, _, _) => {
+                    pair.completed_at = Some(Utc::now());
+                    Self::calculate_actual_profit(pair);
+                    ArbitrageState::Completed
+                }
+                // Maker成交，Taker失败 - 部分成功（需要对冲）
+                (true, false, _, true) => {
+                    pair.completed_at = Some(Utc::now());
+                    warn!("Arbitrage {} partial success: Maker filled but Taker failed", pair.id);
+                    ArbitrageState::PartialSuccess
+                }
+                // Taker成交，Maker失败 - 部分成功（需要对冲）
+                (false, true, true, _) => {
+                    pair.completed_at = Some(Utc::now());
+                    warn!("Arbitrage {} partial success: Taker filled but Maker failed", pair.id);
+                    ArbitrageState::PartialSuccess
+                }
+                // 两边都失败
+                (false, false, true, true) => {
+                    pair.completed_at = Some(Utc::now());
+                    ArbitrageState::Failed
+                }
+                // Maker成交，等待Taker
+                (true, false, _, false) => ArbitrageState::MakerFilled,
+                // 其他情况保持当前状态
+                _ => pair.state,
+            };
+            
+            let new_state = pair.state;
+            let is_terminal = new_state.is_terminal();
+            (old_state, new_state, is_terminal)
+        } else {
+            return;
         };
         
-        // 状态变化时更新统计
-        if old_state != pair.state && pair.state.is_terminal() {
+        // 更新统计（现在没有借用冲突）
+        if old_state != new_state && is_terminal {
             self.stats.active_pairs = self.stats.active_pairs.saturating_sub(1);
             self.stats.completed_pairs += 1;
             
-            match pair.state {
+            match new_state {
                 ArbitrageState::Completed => {
                     self.stats.successful_pairs += 1;
-                    if let Some(profit) = pair.actual_profit {
-                        self.stats.total_actual_profit += profit;
-                    }
+                }
+                ArbitrageState::PartialSuccess => {
+                    self.stats.partial_success_pairs += 1;
                 }
                 ArbitrageState::Failed => {
                     self.stats.failed_pairs += 1;
@@ -265,13 +264,13 @@ impl ArbitrageManager {
             
             info!(
                 "Arbitrage {} state changed from {:?} to {:?}", 
-                pair.id, old_state, pair.state
+                arbitrage_id, old_state, new_state
             );
         }
     }
     
     /// 计算实际利润
-    fn calculate_actual_profit(&mut self, pair: &mut ArbitragePair) {
+    fn calculate_actual_profit(pair: &mut ArbitragePair) {
         // 简化计算：实际利润 = (Taker成交价 - Maker成交价) * 数量 - 手续费
         // 这里暂时使用预期利润，实际应该从订单的实际成交价格计算
         pair.actual_profit = Some(pair.expected_profit * Decimal::from_f64(0.95).unwrap()); // 假设5%的滑点和手续费

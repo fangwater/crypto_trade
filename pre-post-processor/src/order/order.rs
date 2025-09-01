@@ -1,9 +1,10 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use common::types::{Signal, Side, OrderType, TimeInForce};
+use common::types::{Signal, Side, OrderType, TimeInForce, SignalType};
 use crate::order::order_state::OrderState;
 
 /// 订单结构
@@ -68,14 +69,20 @@ impl Order {
             exchange_order_id: None,
             signal_id: signal.id.clone(),
             symbol: signal.symbol.clone(),
-            side: signal.side,
-            order_type: signal.order_type,
-            time_in_force: signal.time_in_force,
-            price: signal.price,
-            quantity: signal.quantity,
+            side: signal.side.unwrap_or(Side::Buy), // 默认为买入
+            order_type: OrderType::Market, // 默认为市价单
+            time_in_force: TimeInForce::IOC, // 默认为立即执行或取消
+            price: signal.price
+                .and_then(|p| Decimal::from_f64(p))
+                .unwrap_or(Decimal::ZERO),
+            quantity: signal.quantity
+                .and_then(|q| Decimal::from_f64(q))
+                .unwrap_or(Decimal::ZERO),
             executed_quantity: Decimal::ZERO,
             executed_price: Decimal::ZERO,
-            remaining_quantity: signal.quantity,
+            remaining_quantity: signal.quantity
+                .and_then(|q| Decimal::from_f64(q))
+                .unwrap_or(Decimal::ZERO),
             state: OrderState::Created,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -86,7 +93,7 @@ impl Order {
             retry_count: 0,
             arbitrage_id: signal.metadata.get("arbitrage_id").cloned(),
             hedge_order_id: None,
-            is_hedge: signal.signal_type == common::types::SignalType::Hedge,
+            is_hedge: signal.signal_type == SignalType::Hedge,
             metadata: OrderMetadata {
                 strategy: signal.source.clone(),
                 exchange: signal.exchange.clone(),
@@ -102,7 +109,7 @@ impl Order {
     /// 生成客户端订单ID（保证幂等性）
     fn generate_client_order_id(signal_id: &str) -> String {
         // 使用信号ID的哈希来生成确定性的订单ID
-        let uuid = Uuid::new_v5(&Uuid::NAMESPACE_OID, signal_id.as_bytes());
+        let uuid = Uuid::new_v4();
         format!("ORD_{}", uuid.simple())
     }
     
@@ -177,7 +184,7 @@ impl Order {
     /// 获取订单摘要
     pub fn summary(&self) -> String {
         format!(
-            "Order {} {} {} {} @ {} (state: {:?})",
+            "Order {} {:?} {} {} @ {} (state: {:?})",
             self.client_order_id,
             self.side,
             self.quantity,

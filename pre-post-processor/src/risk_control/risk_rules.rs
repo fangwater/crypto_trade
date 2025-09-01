@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 use chrono::{DateTime, Utc};
-use anyhow::{Result, bail};
+use anyhow::Result;
 use tracing::{debug, warn};
 
 use common::types::Signal;
@@ -17,6 +19,125 @@ pub trait RiskRule {
     /// 是否为关键规则（失败后停止）
     fn is_critical(&self) -> bool {
         true
+    }
+}
+
+/// 仓位规则
+pub struct PositionRule {
+    pub max_single_position_ratio: Decimal,
+    pub max_total_position_ratio: Decimal,
+    pub max_correlated_position_ratio: Decimal,
+}
+
+/// 频率控制规则
+pub struct FrequencyRule {
+    pub max_trades_per_minute: usize,
+    pub max_trades_per_hour: usize,
+    pub max_trades_per_day: usize,
+    pub min_trade_interval_ms: u32,
+}
+
+/// 盈亏规则
+pub struct PnLRule {
+    pub max_daily_loss: Decimal,
+    pub max_single_loss: Decimal,
+    pub max_consecutive_losses: usize,
+    pub max_drawdown: Decimal,
+}
+
+/// 市场条件规则
+pub struct MarketRule {
+    pub max_slippage: Decimal,
+    pub min_liquidity: Decimal,
+    pub max_volatility: Decimal,
+}
+
+/// 时间规则
+pub struct TimeRule {
+    pub trading_windows: Vec<(String, String, Vec<u32>)>,  // (开始时间, 结束时间, 星期几)
+    pub blackout_dates: Vec<DateTime<Utc>>,
+}
+
+/// 品种特定规则
+pub struct SymbolRule {
+    pub symbol: String,
+    pub max_position: Decimal,
+    pub max_capital_used: Decimal,
+    pub max_pending_orders: usize,
+    pub max_trades_per_window: usize,
+    pub time_window_seconds: u32,
+}
+
+/// 风控规则集合
+pub struct RiskRules {
+    pub position_rule: Option<PositionRule>,
+    pub frequency_rule: Option<FrequencyRule>,
+    pub pnl_rule: Option<PnLRule>,
+    pub market_rule: Option<MarketRule>,
+    pub time_rule: Option<TimeRule>,
+    pub symbol_rules: HashMap<String, SymbolRule>,
+    
+    // 全局限制
+    pub max_total_exposure_ratio: Decimal,
+    pub max_position_symbols: usize,
+    pub max_daily_trades: usize,
+    pub max_daily_loss: Decimal,
+    pub total_capital: Decimal,
+}
+
+impl RiskRules {
+    pub fn new() -> Self {
+        Self {
+            position_rule: None,
+            frequency_rule: None,
+            pnl_rule: None,
+            market_rule: None,
+            time_rule: None,
+            symbol_rules: HashMap::new(),
+            max_total_exposure_ratio: Decimal::from_f64(0.03).unwrap(),
+            max_position_symbols: 10,
+            max_daily_trades: 1000,
+            max_daily_loss: Decimal::from(10000),
+            total_capital: Decimal::from(1000000),
+        }
+    }
+    
+    /// 更新全局限制
+    pub fn update_global_limits(
+        &mut self,
+        max_total_exposure_ratio: f64,
+        max_position_symbols: usize,
+        max_daily_trades: usize,
+        max_daily_loss: Decimal,
+        total_capital: Decimal,
+    ) {
+        self.max_total_exposure_ratio = Decimal::from_f64(max_total_exposure_ratio)
+            .unwrap_or(self.max_total_exposure_ratio);
+        self.max_position_symbols = max_position_symbols;
+        self.max_daily_trades = max_daily_trades;
+        self.max_daily_loss = max_daily_loss;
+        self.total_capital = total_capital;
+    }
+    
+    /// 添加品种规则
+    pub fn add_symbol_rule(
+        &mut self,
+        symbol: String,
+        max_position: Decimal,
+        max_capital_used: Decimal,
+        max_pending_orders: usize,
+        max_trades_per_window: usize,
+        time_window_seconds: u32,
+    ) {
+        let rule = SymbolRule {
+            symbol: symbol.clone(),
+            max_position,
+            max_capital_used,
+            max_pending_orders,
+            max_trades_per_window,
+            time_window_seconds,
+        };
+        self.symbol_rules.insert(symbol, rule);
     }
 }
 
@@ -42,12 +163,15 @@ impl RiskRule for PositionLimitRule {
             .map(|p| p.quantity)
             .unwrap_or(Decimal::ZERO);
         
-        let new_position = current_position + signal.quantity;
+        let quantity = signal.quantity
+            .and_then(|q| Decimal::from_f64(q))
+            .unwrap_or(Decimal::ZERO);
+        let new_position = current_position + quantity;
         
         if new_position.abs() > self.max_position {
             debug!(
                 "Position limit exceeded for {}: current={}, signal={}, limit={}", 
-                signal.symbol, current_position, signal.quantity, self.max_position
+                signal.symbol, current_position, quantity, self.max_position
             );
             return Ok(false);
         }
@@ -78,7 +202,10 @@ impl RiskRule for CapitalLimitRule {
             .map(|q| q.current_capital)
             .unwrap_or(Decimal::ZERO);
         
-        let signal_capital = signal.price * signal.quantity;
+        let signal_capital = signal.price
+            .and_then(|p| signal.quantity.map(|q| p * q))
+            .and_then(|c| Decimal::from_f64(c))
+            .unwrap_or(Decimal::ZERO);
         let new_capital = current_capital + signal_capital;
         
         if new_capital > self.max_capital {
@@ -145,7 +272,10 @@ impl RiskRule for TotalExposureRule {
     }
     
     fn check(&self, signal: &Signal, state: &SharedState) -> Result<bool> {
-        let signal_exposure = (signal.price * signal.quantity).abs();
+        let signal_exposure = signal.price
+            .and_then(|p| signal.quantity.map(|q| (p * q).abs()))
+            .and_then(|e| Decimal::from_f64(e))
+            .unwrap_or(Decimal::ZERO);
         let new_exposure = state.total_exposure + signal_exposure;
         
         // 超过最大敞口，拒绝

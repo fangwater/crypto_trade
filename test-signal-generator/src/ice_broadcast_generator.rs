@@ -3,8 +3,7 @@ use tracing::{info, error, debug, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use iceoryx2::prelude::*;
 use iceoryx2::port::publisher::Publisher;
-use chrono::Utc;
-use common::signals::*;
+use common::types::{Signal, SignalType, SignalData, FundingDirection};
 use common::config::MarketConfig;
 use tokio::sync::broadcast;
 use tokio::select;
@@ -228,14 +227,19 @@ fn process_market_event<T: iceoryx2::service::Service>(
     if event.spread > spread_threshold {
         // 生成自适应价差信号
         let spread_percentile = calculate_spread_percentile(event.spread);
-        let adaptive_signal = Signal::AdaptiveSpreadDeviation(AdaptiveSpreadDeviationSignal {
-            exchange_id: event.exchange_id,
-            symbol_id: event.symbol_id,
-            spread_percentile,
-            current_spread: event.spread,
-            threshold_percentile: 0.8,
-            timestamp: Utc::now(),
-        });
+        let mut adaptive_signal = Signal::new(
+            SignalType::AdaptiveSpreadDeviation,
+            SignalData::AdaptiveSpreadDeviation {
+                exchange_id: event.exchange_id,
+                symbol_id: event.symbol_id,
+                spread_percentile,
+                current_spread: event.spread,
+                threshold_percentile: 0.8,
+            }
+        );
+        adaptive_signal.symbol = symbol_name.to_string();
+        adaptive_signal.exchange = market_config.get_exchange_name(event.exchange_id)
+            .unwrap_or("unknown".to_string());
         
         send_signal(&adaptive_signal, adaptive_publisher, "自适应价差", 
                    event.exchange_id, event.symbol_id, symbol_name)?;
@@ -254,13 +258,18 @@ fn process_market_event<T: iceoryx2::service::Service>(
                 FundingDirection::Neutral
             };
             
-            let funding_signal = Signal::FundingRateDirection(FundingRateDirectionSignal {
-                exchange_id: event.exchange_id,
-                symbol_id: event.symbol_id,
-                funding_rate,
-                direction,
-                timestamp: Utc::now(),
-            });
+            let mut funding_signal = Signal::new(
+                SignalType::FundingRateDirection,
+                SignalData::FundingRateDirection {
+                    exchange_id: event.exchange_id,
+                    symbol_id: event.symbol_id,
+                    funding_rate,
+                    direction,
+                }
+            );
+            funding_signal.symbol = symbol_name.to_string();
+            funding_signal.exchange = market_config.get_exchange_name(event.exchange_id)
+                .unwrap_or("unknown".to_string());
             
             send_signal(&funding_signal, funding_publisher, "资金费率",
                        event.exchange_id, event.symbol_id, symbol_name)?;

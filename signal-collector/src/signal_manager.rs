@@ -1,5 +1,6 @@
 use chrono::Utc;
-use common::signals::{Signal, SignalType, SignalStatus};
+use common::types::{Signal, SignalType};
+use common::signals::SignalStatus;
 
 pub struct SignalManager {
     signals: Vec<SignalStatus>,  // 使用Vec，通过索引访问
@@ -39,6 +40,24 @@ impl SignalManager {
                 trigger_indices: Vec::new(),
                 last_updated: Utc::now(),
             },
+            SignalStatus {
+                signal_type: SignalType::Arbitrage,
+                last_signal: None,
+                trigger_indices: Vec::new(),
+                last_updated: Utc::now(),
+            },
+            SignalStatus {
+                signal_type: SignalType::Market,
+                last_signal: None,
+                trigger_indices: Vec::new(),
+                last_updated: Utc::now(),
+            },
+            SignalStatus {
+                signal_type: SignalType::Hedge,
+                last_signal: None,
+                trigger_indices: Vec::new(),
+                last_updated: Utc::now(),
+            },
         ];
 
         Self { signals }
@@ -51,11 +70,14 @@ impl SignalManager {
             SignalType::FundingRateDirection => 2,
             SignalType::RealTimeFundingRisk => 3,
             SignalType::OrderResponse => 4,
+            SignalType::Arbitrage => 5,
+            SignalType::Market => 6,
+            SignalType::Hedge => 7,
         }
     }
 
     pub fn update_signal(&mut self, signal: Signal) {
-        let idx = self.signal_type_to_idx(signal.signal_type());
+        let idx = self.signal_type_to_idx(signal.signal_type);  // 直接访问字段
         if let Some(status) = self.signals.get_mut(idx) {
             status.last_signal = Some(signal);
             status.last_updated = Utc::now();

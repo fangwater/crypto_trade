@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::collections::HashMap;
 use chrono::Utc;
-use common::signals::{Signal, SignalType, FundingDirection};
+use common::types::{Signal, SignalType, SignalData, FundingDirection};
 use common::events::{TradingEvent, OpenPositionEvent};
 use common::types::{Priority, Side, OrderType, TriggerType, Symbol, Exchange};
 use crate::signal_manager::SignalManager;
@@ -92,29 +92,30 @@ impl Trigger for MTTrigger {
 
     fn evaluate(&self, manager: &SignalManager, signal: &Signal) -> Option<TradingEvent> {
         // 简单的测试逻辑
-        match signal {
-            Signal::FundingRateDirection(funding) => {
+        match &signal.data {
+            SignalData::FundingRateDirection { exchange_id: _, symbol_id, funding_rate, direction } => {
                 // 检查是否有价差信号
-                if let Some(Signal::AdaptiveSpreadDeviation(spread)) = 
-                    manager.get_last_signal_by_type(SignalType::AdaptiveSpreadDeviation) {
-                    if spread.spread_percentile > 0.8 && funding.funding_rate.abs() > self.funding_threshold {
-                        let side = match funding.direction {
-                            FundingDirection::Positive => Side::Sell,
-                            FundingDirection::Negative => Side::Buy,
-                            _ => return None,
-                        };
-                        
-                        return Some(TradingEvent::OpenPosition(OpenPositionEvent {
-                            symbol: Symbol(funding.symbol_id),
-                            exchange: Exchange::Binance, // TODO: 从exchange_id转换
-                            side,
-                            quantity: 100.0,
-                            order_type: OrderType::Market,
-                            price: None,
-                            trigger_type: TriggerType::MTTrigger,
-                            reason: format!("MT开仓信号触发"),
-                            timestamp: Utc::now(),
-                        }));
+                if let Some(spread_signal) = manager.get_last_signal_by_type(SignalType::AdaptiveSpreadDeviation) {
+                    if let SignalData::AdaptiveSpreadDeviation { spread_percentile, .. } = &spread_signal.data {
+                        if spread_percentile > &0.8 && funding_rate.abs() > self.funding_threshold {
+                            let side = match direction {
+                                FundingDirection::Positive => Side::Sell,
+                                FundingDirection::Negative => Side::Buy,
+                                _ => return None,
+                            };
+                            
+                            return Some(TradingEvent::OpenPosition(OpenPositionEvent {
+                                symbol: Symbol(*symbol_id),
+                                exchange: Exchange::Binance, // TODO: 从exchange_id转换
+                                side,
+                                quantity: 100.0,
+                                order_type: OrderType::Market,
+                                price: None,
+                                trigger_type: TriggerType::MTTrigger,
+                                reason: format!("MT开仓信号触发"),
+                                timestamp: Utc::now(),
+                            }));
+                        }
                     }
                 }
             }

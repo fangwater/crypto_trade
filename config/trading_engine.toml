@@ -1,0 +1,94 @@
+# Trading Engine Configuration
+
+[ws_pool]
+max_connections_per_exchange = 5
+heartbeat_interval_ms = 30000
+reconnect_delay_ms = 1000
+max_reconnect_attempts = 5
+health_check_interval_ms = 5000
+message_buffer_size = 10000
+
+[executor]
+order_timeout_ms = 5000
+max_retry_attempts = 3
+concurrent_send_count = 3
+idempotent_key_prefix = "TE"
+
+[ipc]
+service_name = "trading_engine"
+input_topic = "execution_commands"
+output_topic = "market_data"
+buffer_size = 1000
+
+# Exchange Configurations
+
+[exchanges.binance]
+enabled = true
+api_key = "your_binance_api_key"
+secret_key = "your_binance_secret_key"
+
+[exchanges.binance.spot]
+enabled = true
+ws_endpoints = [
+    "wss://stream.binance.com:9443/ws",
+    "wss://stream1.binance.com:9443/ws",
+    "wss://stream2.binance.com:9443/ws"
+]
+rest_endpoint = "https://api.binance.com"
+connection_count = 2
+
+[exchanges.binance.futures]
+enabled = true
+ws_endpoints = [
+    "wss://fstream.binance.com/ws",
+    "wss://fstream1.binance.com/ws",
+    "wss://fstream2.binance.com/ws"
+]
+rest_endpoint = "https://fapi.binance.com"
+connection_count = 2
+
+[exchanges.okex]
+enabled = false
+api_key = "your_okex_api_key"
+secret_key = "your_okex_secret_key"
+
+[exchanges.okex.spot]
+enabled = false
+ws_endpoints = [
+    "wss://ws.okx.com:8443/ws/v5/public",
+    "wss://wsaws.okx.com:8443/ws/v5/public"
+]
+rest_endpoint = "https://www.okx.com"
+connection_count = 2
+
+[exchanges.okex.futures]
+enabled = false
+ws_endpoints = [
+    "wss://ws.okx.com:8443/ws/v5/public",
+    "wss://wsaws.okx.com:8443/ws/v5/public"
+]
+rest_endpoint = "https://www.okx.com"
+connection_count = 2
+
+[exchanges.bybit]
+enabled = false
+api_key = "your_bybit_api_key"
+secret_key = "your_bybit_secret_key"
+
+[exchanges.bybit.spot]
+enabled = false
+ws_endpoints = [
+    "wss://stream.bybit.com/v5/public/spot",
+    "wss://stream-testnet.bybit.com/v5/public/spot"
+]
+rest_endpoint = "https://api.bybit.com"
+connection_count = 2
+
+[exchanges.bybit.futures]
+enabled = false
+ws_endpoints = [
+    "wss://stream.bybit.com/v5/public/linear",
+    "wss://stream-testnet.bybit.com/v5/public/linear"
+]
+rest_endpoint = "https://api.bybit.com"
+connection_count = 2

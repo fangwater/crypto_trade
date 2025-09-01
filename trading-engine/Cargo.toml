@@ -9,6 +9,7 @@ common = { path = "../common" }
 tokio.workspace = true
 tokio-tungstenite.workspace = true
 serde.workspace = true
+serde_json = "1.0"
 iceoryx2.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
@@ -19,3 +20,16 @@ dashmap.workspace = true
 chrono.workspace = true
 rust_decimal.workspace = true
 futures.workspace = true
+bytes.workspace = true
+crossbeam.workspace = true
+toml = "0.8"
+url = "2.5"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+parking_lot = "0.12"
+once_cell.workspace = true
+rand = "0.8"
+futures-util = "0.3"

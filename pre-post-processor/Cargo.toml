@@ -17,3 +17,6 @@ async-trait.workspace = true
 dashmap.workspace = true
 chrono.workspace = true
 rust_decimal.workspace = true
+uuid = { version = "1.10", features = ["v4", "serde"] }
+prost.workspace = true
+prost-types.workspace = true

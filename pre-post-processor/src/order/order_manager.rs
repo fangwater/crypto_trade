@@ -1,8 +1,9 @@
 use std::collections::{HashMap, VecDeque};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 use anyhow::{Result, bail};
-use tracing::{debug, info, warn, error};
+use tracing::{debug, info, warn};
 
 use common::types::{Signal, ExecutionReport};
 use crate::order::{
@@ -76,16 +77,16 @@ impl PriorityQueue {
 
 /// 订单统计
 #[derive(Debug, Clone)]
-struct OrderStats {
-    total_orders: usize,           // 总订单数
-    active_orders: usize,          // 活跃订单数
-    filled_orders: usize,          // 成交订单数
-    cancelled_orders: usize,       // 取消订单数
-    rejected_orders: usize,        // 拒绝订单数
-    total_volume: Decimal,         // 总成交量
-    total_fees: Decimal,           // 总手续费
-    success_rate: f64,            // 成功率
-    avg_fill_time_ms: i64,        // 平均成交时间（毫秒）
+pub struct OrderStats {
+    pub total_orders: usize,           // 总订单数
+    pub active_orders: usize,          // 活跃订单数
+    pub filled_orders: usize,          // 成交订单数
+    pub cancelled_orders: usize,       // 取消订单数
+    pub rejected_orders: usize,        // 拒绝订单数
+    pub total_volume: Decimal,         // 总成交量
+    pub total_fees: Decimal,           // 总手续费
+    pub success_rate: f64,            // 成功率
+    pub avg_fill_time_ms: i64,        // 平均成交时间（毫秒）
 }
 
 impl OrderStats {
@@ -247,7 +248,7 @@ impl OrderManager {
             .clone();
         
         match report.status {
-            common::types::OrderStatus::New => {
+            common::types::OrderStatus::Pending => {
                 self.handle_order_acknowledged(&order.client_order_id)?;
             }
             common::types::OrderStatus::PartiallyFilled => {
@@ -260,10 +261,7 @@ impl OrderManager {
                 self.handle_order_cancelled(&order.client_order_id)?;
             }
             common::types::OrderStatus::Rejected => {
-                self.handle_order_rejected(&order.client_order_id, report.text.unwrap_or_default())?;
-            }
-            common::types::OrderStatus::Expired => {
-                self.handle_order_expired(&order.client_order_id)?;
+                self.handle_order_rejected(&order.client_order_id, "Order rejected".to_string())?;
             }
             _ => {
                 debug!("Unhandled order status: {:?}", report.status);
@@ -293,17 +291,23 @@ impl OrderManager {
     fn handle_partial_fill(&mut self, order_id: &str, report: &ExecutionReport) -> Result<()> {
         self.state_manager.transition_order(
             order_id,
-            StateTransitionEvent::PartialFill(report.executed_quantity, report.executed_price)
+            StateTransitionEvent::PartialFill(
+                Decimal::from_f64(report.filled_quantity).unwrap_or(Decimal::ZERO),
+                Decimal::from_f64(report.price).unwrap_or(Decimal::ZERO)
+            )
         )?;
         
         if let Some(order) = self.order_book.orders_by_client_id.get_mut(order_id) {
-            order.update_execution(report.executed_quantity, report.executed_price);
+            order.update_execution(
+                Decimal::from_f64(report.filled_quantity).unwrap_or(Decimal::ZERO),
+                Decimal::from_f64(report.price).unwrap_or(Decimal::ZERO)
+            );
             
             // 记录成交
             self.record_fill(order_id, report);
         }
         
-        debug!("Order {} partially filled: {} @ {}", order_id, report.executed_quantity, report.executed_price);
+        debug!("Order {} partially filled: {} @ {}", order_id, report.filled_quantity, report.price);
         Ok(())
     }
     
@@ -314,29 +318,40 @@ impl OrderManager {
             StateTransitionEvent::Fill
         )?;
         
-        if let Some(order) = self.order_book.orders_by_client_id.get_mut(order_id) {
-            order.update_execution(report.executed_quantity, report.executed_price);
-            
-            // 记录成交
-            self.record_fill(order_id, report);
-            
-            // 更新统计
-            self.stats.filled_orders += 1;
-            self.stats.active_orders = self.stats.active_orders.saturating_sub(1);
-            self.stats.total_volume += order.executed_quantity * order.executed_price;
-            
-            // 计算成交时间
-            if let Some(submitted_at) = order.submitted_at {
-                let fill_time = Utc::now()
-                    .signed_duration_since(submitted_at)
-                    .num_milliseconds();
-                self.update_avg_fill_time(fill_time);
+        let (executed_quantity, executed_price, submitted_at, arbitrage_id) = {
+            if let Some(order) = self.order_book.orders_by_client_id.get_mut(order_id) {
+                order.update_execution(
+                    Decimal::from_f64(report.filled_quantity).unwrap_or(Decimal::ZERO),
+                    Decimal::from_f64(report.price).unwrap_or(Decimal::ZERO)
+                );
+                
+                // 更新统计
+                self.stats.filled_orders += 1;
+                self.stats.active_orders = self.stats.active_orders.saturating_sub(1);
+                
+                (order.executed_quantity, order.executed_price, order.submitted_at, order.arbitrage_id.clone())
+            } else {
+                return Ok(());
             }
-            
-            // 如果是套利订单，更新套利状态
-            if let Some(ref arb_id) = order.arbitrage_id {
-                self.arbitrage_manager.update_order_status(arb_id, order_id, OrderState::Filled);
-            }
+        };
+        
+        // 记录成交
+        self.record_fill(order_id, report);
+        
+        // 更新总成交量
+        self.stats.total_volume += executed_quantity * executed_price;
+        
+        // 计算成交时间
+        if let Some(submitted_at) = submitted_at {
+            let fill_time = Utc::now()
+                .signed_duration_since(submitted_at)
+                .num_milliseconds();
+            self.update_avg_fill_time(fill_time);
+        }
+        
+        // 如果是套利订单，更新套利状态
+        if let Some(ref arb_id) = arbitrage_id {
+            self.arbitrage_manager.update_order_status(arb_id, order_id, OrderState::Filled);
         }
         
         self.stats.update_success_rate();
@@ -406,13 +421,13 @@ impl OrderManager {
     fn record_fill(&mut self, order_id: &str, report: &ExecutionReport) {
         let fill = Fill {
             order_id: order_id.to_string(),
-            trade_id: report.trade_id.clone().unwrap_or_default(),
-            symbol: report.symbol.clone(),
+            trade_id: format!("TRD_{}", uuid::Uuid::new_v4()), // 生成交易ID
+            symbol: format!("{:?}", report.symbol),  // 使用 Debug trait 转换 Symbol
             side: report.side,
-            price: report.executed_price,
-            quantity: report.executed_quantity,
-            fee: report.fee.unwrap_or(Decimal::ZERO),
-            fee_currency: report.fee_currency.clone().unwrap_or("USDT".to_string()),
+            price: Decimal::from_f64(report.price).unwrap_or(Decimal::ZERO),
+            quantity: Decimal::from_f64(report.filled_quantity).unwrap_or(Decimal::ZERO),
+            fee: Decimal::ZERO, // 默认手续费为0
+            fee_currency: "USDT".to_string(),
             timestamp: Utc::now(),
         };
         

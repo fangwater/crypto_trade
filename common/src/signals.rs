@@ -1,36 +1,10 @@
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum SignalType {
-    AdaptiveSpreadDeviation,
-    FixedSpreadDeviation,
-    FundingRateDirection,
-    RealTimeFundingRisk,
-    OrderResponse,
-}
+// 从 types 模块导入统一的 Signal 定义
+pub use crate::types::{Signal, SignalType, SignalData, FundingDirection, RiskLevel, OrderResponseStatus};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Signal {
-    AdaptiveSpreadDeviation(AdaptiveSpreadDeviationSignal),
-    FixedSpreadDeviation(FixedSpreadDeviationSignal),
-    FundingRateDirection(FundingRateDirectionSignal),
-    RealTimeFundingRisk(RealTimeFundingRiskSignal),
-    OrderResponse(OrderResponseSignal),
-}
-
-impl Signal {
-    pub fn signal_type(&self) -> SignalType {
-        match self {
-            Signal::AdaptiveSpreadDeviation(_) => SignalType::AdaptiveSpreadDeviation,
-            Signal::FixedSpreadDeviation(_) => SignalType::FixedSpreadDeviation,
-            Signal::FundingRateDirection(_) => SignalType::FundingRateDirection,
-            Signal::RealTimeFundingRisk(_) => SignalType::RealTimeFundingRisk,
-            Signal::OrderResponse(_) => SignalType::OrderResponse,
-        }
-    }
-}
-
+// 保留原有的具体信号结构，用于兼容性
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdaptiveSpreadDeviationSignal {
     pub exchange_id: u32,
@@ -59,13 +33,6 @@ pub struct FundingRateDirectionSignal {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FundingDirection {
-    Positive,
-    Negative,
-    Neutral,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RealTimeFundingRiskSignal {
     pub exchange_id: u32,
@@ -76,14 +43,6 @@ pub struct RealTimeFundingRiskSignal {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RiskLevel {
-    Low,
-    Medium,
-    High,
-    Critical,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderResponseSignal {
     pub order_id: String,
@@ -91,14 +50,6 @@ pub struct OrderResponseSignal {
     pub symbol_id: u32,
     pub status: OrderResponseStatus,
     pub timestamp: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum OrderResponseStatus {
-    Filled,
-    PartiallyFilled,
-    Rejected,
-    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

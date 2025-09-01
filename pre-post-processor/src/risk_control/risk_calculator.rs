@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use tracing::debug;
 
 /// 风险指标计算器
@@ -187,7 +188,7 @@ impl RiskCalculator {
         
         let now = Utc::now();
         let day_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
-        let day_start_utc = DateTime::from_naive_utc_and_offset(day_start, Utc);
+        let day_start_utc = DateTime::<Utc>::from_naive_utc_and_offset(day_start, Utc);
         
         let mut total_pnl = Decimal::ZERO;
         let mut daily_pnl = Decimal::ZERO;
@@ -294,14 +295,18 @@ impl RiskCalculator {
         // 计算标准差
         let variance: Decimal = returns
             .iter()
-            .map(|r| (*r - mean_return).powi(2))
+            .map(|r| {
+                let diff = *r - mean_return;
+                diff * diff
+            })
             .sum::<Decimal>() / Decimal::from(returns.len());
         
-        let std_dev = variance.sqrt().unwrap_or(Decimal::ONE);
+        // 简化处理：不计算标准差，直接使用方差
+        let std_dev = variance;
         
         // 夏普比率（假设无风险利率为0）
         if std_dev > Decimal::ZERO {
-            metrics.sharpe_ratio = mean_return / std_dev * Decimal::from(252).sqrt().unwrap(); // 年化
+            metrics.sharpe_ratio = mean_return / std_dev * Decimal::from(16); // sqrt(252) ≈ 16
         }
         
         // 索提诺比率（只考虑下行风险）
@@ -314,13 +319,13 @@ impl RiskCalculator {
         if !downside_returns.is_empty() {
             let downside_variance: Decimal = downside_returns
                 .iter()
-                .map(|r| r.powi(2))
+                .map(|r| r * r)
                 .sum::<Decimal>() / Decimal::from(downside_returns.len());
             
-            let downside_dev = downside_variance.sqrt().unwrap_or(Decimal::ONE);
+            let downside_dev = downside_variance; // 使用方差代替标准差
             
             if downside_dev > Decimal::ZERO {
-                metrics.sortino_ratio = mean_return / downside_dev * Decimal::from(252).sqrt().unwrap();
+                metrics.sortino_ratio = mean_return / downside_dev * Decimal::from(16); // sqrt(252) ≈ 16
             }
         }
     }

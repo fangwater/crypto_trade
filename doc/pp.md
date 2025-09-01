@@ -197,11 +197,19 @@ Created -> Validated -> Submitting -> Submitted -> Acknowledged
 
 ### 3.1 WebSocket连接池
 ```
-实现Trading Engine的WebSocket连接池：
+实现Trading Engine
+有一个toml可以配置执行的情况。
 
 需求：
-- 每个交易所维护多个WebSocket连接
-- Spot: 3个连接, Futures: 3个连接
+- 每个交易所期货现货分开，视为两个。每个交易所都可以配置是否开启。
+- 每个交易所如果开启，维护多个WebSocket连接。
+connection构造的方式参考 /Users/fanghaizhou/project/crypto_proxy/src/connection/binance_conn.rs 还有bybit 和okex connection实现在connon中。
+要注意心跳保活、重启维护。
+connection收到的所有消息，都打到一个公共的mpsc队列中，直接保存bytes。
+维护一个select，每当队列有效的时候，bytes的形式。输入给post-process，走icexy2
+
+Trading Engine还要接受一个iceoryx2的输入，来自pre-process和其他。所以，Engine需要维护两个队列，一个输入，一个输出。
+
 - 健康度评分机制
 - 自动重连和故障转移
 
@@ -212,20 +220,13 @@ WebSocket管理：
    - 最近错误
 
 2. 智能路由选择
-   - 根据健康度选择最优连接
-   - 支持多路并发发送
-   - 故障自动切换
-
-3. 连接维护
-   - 心跳检测
-   - 指数退避重连
-   - 连接池动态调整
+   - 根据健康度选择topk个最优连接。
+   - 当select发现输入队列有消息，根据消息选择，然后选择ws，进行发送。
 
 请实现：
 1. ws_pool.rs - 连接池管理
-2. ws_connection.rs - 单个连接封装
 3. health_tracker.rs - 健康度监控
-4. connection_selector.rs - 连接选择算法
+4. connection_selector.rs - 连接选择
 ```
 
 ### 3.2 订单执行器
@@ -269,13 +270,6 @@ WebSocket管理：
 - 交易所特定的签名算法
 - 响应解析和标准化
 - 错误码映射
-
-请实现：
-1. exchange_adapter.rs - 适配器trait
-2. binance_adapter.rs - 币安实现
-3. message_parser.rs - 消息解析
-4. error_mapper.rs - 错误映射
-```
 
 ## 4. 系统集成与测试
 
